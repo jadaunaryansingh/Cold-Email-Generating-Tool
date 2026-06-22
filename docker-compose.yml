@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  cold-email-automator:
+    build: .
+    container_name: cold-email-automator
+    ports:
+      - "8000:8000"
+    volumes:
+      # Map the environment file for hot configuration changes
+      - ./.env:/app/.env
+      # Persist OAuth tokens so you stay logged into the Gmail API across container runs
+      - ./tokens:/app/tokens
+      # Map the Google credentials file for Gmail OAuth setup
+      - ./credentials.json:/app/credentials.json
+      # Map a folder for tracking uploads (optional)
+      - ./uploads:/app/uploads
+    restart: unless-stopped

@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local environment variables and settings
+.env
+.env.local
+
+# User uploaded test files (if stored locally)
+uploads/
+
+# IDE files
+.vscode/
+.idea/
+.ipynb_checkpoints/

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cold Email Automator</title>
+    <!-- Outfit Font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
+</head>
+<body>
+    <!-- Background glow elements -->
+    <div class="glow-bg-1"></div>
+    <div class="glow-bg-2"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                <span class="gradient-text">Cold Email</span> Automator
+            </div>
+            <p class="subtitle">Personalize and broadcast resume emails in bulk using SMTP or Gmail API.</p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Sidebar: Settings & Configuration -->
+            <aside class="glass-card settings-card">
+                <h2 class="section-title">Connection Settings</h2>
+                
+                <div class="form-group">
+                    <label for="send_method">Send Method</label>
+                    <select id="send_method">
+                        <option value="smtp" selected>SMTP Server</option>
+                        <option value="gmail_api">Gmail API (OAuth 2.0)</option>
+                    </select>
+                </div>
+
+                <!-- Traditional SMTP Settings Form -->
+                <form id="smtp-form">
+                    <div id="smtp-inputs-section">
+                        <div class="form-group">
+                            <label for="smtp_server">SMTP Server</label>
+                            <input type="text" id="smtp_server" placeholder="smtp.gmail.com" value="smtp.gmail.com">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="smtp_port">Port</label>
+                                <input type="number" id="smtp_port" placeholder="587" value="587">
+                            </div>
+                            <div class="form-group security-select-group">
+                                <label>Security</label>
+                                <select id="smtp_security">
+                                    <option value="tls" selected>TLS (StartTLS)</option>
+                                    <option value="ssl">SSL</option>
+                                    <option value="none">None</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="sender_email">Sender Email</label>
+                            <input type="email" id="sender_email" placeholder="you@gmail.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="sender_password">App Password</label>
+                            <input type="password" id="sender_password" placeholder="•••• •••• •••• ••••">
+                            <small class="help-text">For Gmail SMTP, use a 16-character App Password.</small>
+                        </div>
+                    </div>
+
+                    <!-- Gmail API Authentication Section (hidden by default) -->
+                    <div id="gmail-api-section" class="hidden">
+                        <div class="gmail-auth-box">
+                            <div class="auth-status-indicator">
+                                <span class="status-dot disconnected" id="auth-dot"></span>
+                                <span id="auth-status-text">Not Authenticated</span>
+                            </div>
+                            <p class="help-text-auth">Authenticate directly with Google to send emails securely without app passwords.</p>
+                            
+                            <!-- Google Sign-in button -->
+                            <button type="button" id="google-login-btn" class="btn btn-google">
+                                <svg class="google-icon" viewBox="0 0 24 24">
+                                    <path fill="#EA4335" d="M5.266 9.765A7.077 7.077 0 0 1 12 4.909c1.69 0 3.218.6 4.418 1.582L19.91 3C17.782 1.145 15.055 0 12 0 7.336 0 3.327 2.745 1.455 6.745l3.81 3.02z"/>
+                                    <path fill="#4285F4" d="M23.49 12.273c0-.818-.082-1.609-.227-2.373H12v4.509h6.464a5.532 5.532 0 0 1-2.4 3.627l3.709 2.873c2.164-2 3.718-4.945 3.718-8.636z"/>
+                                    <path fill="#FBBC05" d="M5.266 14.235A7.16 7.16 0 0 1 4.909 12c0-.79.136-1.545.357-2.235L1.455 6.745A11.964 11.964 0 0 0 0 12c0 1.927.455 3.755 1.255 5.39l4.01-3.155z"/>
+                                    <path fill="#34A853" d="M12 24c3.245 0 5.973-1.073 7.964-2.91l-3.709-2.873c-1.027.69-2.336 1.109-4.255 1.109-3.273 0-6.055-2.209-7.045-5.182L1.255 17.29C3.127 21.29 7.136 24 12 24z"/>
+                                </svg>
+                                Authenticate Gmail API
+                            </button>
+                            
+                            <button type="button" id="google-logout-btn" class="btn btn-secondary hidden">Disconnect Account</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group margin-top-1">
+                        <label for="delay_seconds">Sending Delay (seconds)</label>
+                        <input type="number" id="delay_seconds" value="2.0" step="0.5" min="0.5">
+                        <small class="help-text">Delay between emails to prevent spam flags.</small>
+                    </div>
+                    <button type="submit" id="save-settings-btn" class="btn btn-secondary">Save Configuration</button>
+                </form>
+            </aside>
+
+            <!-- Main Panel: Files, Template & Control -->
+            <main class="main-content">
+                <!-- Step 1: Upload Files -->
+                <section class="glass-card upload-section">
+                    <h2 class="section-title">1. Upload Files</h2>
+                    <div class="upload-grid">
+                        <!-- Contacts File -->
+                        <div class="upload-box" id="contacts-dropzone">
+                            <input type="file" id="contacts_file" accept=".xlsx,.xls,.csv">
+                            <div class="upload-icon">📊</div>
+                            <div class="upload-text">
+                                <span class="highlight">Upload HR Contacts</span>
+                                <span class="filename" id="contacts-filename">Drag & drop Excel or CSV</span>
+                            </div>
+                        </div>
+                        <!-- Resume File -->
+                        <div class="upload-box" id="resume-dropzone">
+                            <input type="file" id="resume_file" accept=".pdf">
+                            <div class="upload-icon">📄</div>
+                            <div class="upload-text">
+                                <span class="highlight">Upload Resume (PDF)</span>
+                                <span class="filename" id="resume-filename">Drag & drop your PDF resume</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Step 2: Customize Template -->
+                <section class="glass-card template-section">
+                    <div class="section-header-row">
+                        <h2 class="section-title">2. Email Template</h2>
+                        <div class="placeholder-container" id="detected-placeholders">
+                            <span class="placeholder-label">Placeholders:</span>
+                            <span class="placeholder-pill disabled">{Name}</span>
+                            <span class="placeholder-pill disabled">{Company}</span>
+                            <span class="placeholder-pill disabled">{Role}</span>
+                        </div>
+                    </div>
+
+                    <div class="template-editor-grid">
+                        <div class="editor-pane">
+                            <div class="form-group">
+                                <label for="template_subject">Subject Line</label>
+                                <input type="text" id="template_subject" placeholder="Application for {Role} role at {Company}" value="Application for {Role} role">
+                            </div>
+                            <div class="form-group">
+                                <div class="editor-toolbar">
+                                    <span class="toolbar-label">Formatting:</span>
+                                    <button type="button" class="toolbar-btn" id="toolbar-bold-btn" title="Bold (Ctrl+B)"><b>B</b></button>
+                                    <button type="button" class="toolbar-btn" id="toolbar-italic-btn" title="Italic (Ctrl+I)"><i>I</i></button>
+                                    <div class="toolbar-divider"></div>
+                                    <button type="button" class="toolbar-btn toolbar-btn-link" id="toolbar-link-btn" title="Insert Link (Ctrl+K)">
+                                        🔗 Link <span class="toolbar-shortcut">Ctrl+K</span>
+                                    </button>
+                                    <button type="button" class="toolbar-btn" id="toolbar-unlink-btn" title="Remove Link from selection">✂ Unlink</button>
+                                </div>
+                                <label for="template_body">Email Body (HTML supported)</label>
+                                <textarea id="template_body" placeholder="Dear {Name},&#10;&#10;I am writing to express my interest in the {Role} position at {Company}..."></textarea>
+                            </div>
+
+                            <!-- Link Input Popover -->
+                            <div id="link-popover" class="link-popover hidden">
+                                <div class="link-popover-header">
+                                    <span>🔗 Insert Link</span>
+                                    <button type="button" id="link-popover-close" class="link-popover-close">✕</button>
+                                </div>
+                                <div class="link-popover-body">
+                                    <input type="text" id="link-text-input" placeholder="Link text (e.g. LinkedIn)">
+                                    <input type="url" id="link-url-input" placeholder="https://linkedin.com/in/yourprofile">
+                                    <div class="link-popover-actions">
+                                        <button type="button" id="link-cancel-btn" class="btn btn-tiny">Cancel</button>
+                                        <button type="button" id="link-insert-btn" class="btn btn-primary link-insert-btn">Insert Link</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Preview -->
+                        <div class="preview-pane">
+                            <div class="preview-header">Live Sample Preview</div>
+                            <div class="preview-container">
+                                <div class="preview-recipient-meta" id="preview-recipient-meta" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.8rem; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 0.5rem; display: none;">
+                                    To: <span id="preview-to-email" style="color: var(--neon-blue); font-weight: 600;"></span> 
+                                    <span id="preview-to-name" style="margin-left: 10px; font-size: 0.75rem; color: var(--success-color); background: var(--success-bg); padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 600;"></span>
+                                </div>
+                                <div class="preview-subject" id="preview-subject-out">(Upload contact list to generate preview)</div>
+                                <div class="preview-body" id="preview-body-out">(Placeholder preview body text will appear here once content is entered)</div>
+                                <div class="preview-attachment" id="preview-attachment-out">
+                                    <span class="attach-icon">📎</span> No attachment uploaded
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Step 3: Run & Action Panel -->
+                <section class="glass-card action-section">
+                    <div class="action-controls">
+                        <div class="action-toggles">
+                            <div class="dry-run-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="dry_run_toggle">
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <div class="dry-run-desc">
+                                    <span class="bold">Dry Run Mode</span>
+                                    <span class="help-text">Simulates the email sending process and checks template mapping without sending real emails.</span>
+                                </div>
+                            </div>
+                            <div class="dry-run-control">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="auto_approve_toggle" checked>
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <div class="dry-run-desc">
+                                    <span class="bold">Auto Approval</span>
+                                    <span class="help-text">When disabled, lets you inspect and approve each email preview individually before sending.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="send-emails-btn" class="btn btn-primary btn-glow">Start Send Job</button>
+                    </div>
+
+                    <!-- Progress and Logs -->
+                    <div id="progress-container" class="progress-container hidden">
+                        <div class="progress-header">
+                            <span id="progress-status-text">Ready to run</span>
+                            <span id="progress-percent-text">0%</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Console/Logs output -->
+                    <div id="logs-container" class="logs-container hidden">
+                        <div class="logs-header">
+                            <h3>Execution Logs</h3>
+                            <div class="logs-filters">
+                                <button class="filter-btn active" data-filter="all">All</button>
+                                <button class="filter-btn" data-filter="success">Success</button>
+                                <button class="filter-btn" data-filter="fail">Failed</button>
+                                <button id="clear-logs-btn" class="btn btn-tiny">Clear</button>
+                            </div>
+                        </div>
+                        <div id="logs-list" class="logs-list">
+                            <!-- Logs will append here -->
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Floating Chatbot Widget -->
+    <div class="chat-widget-container">
+        <!-- Floating chat trigger button -->
+        <button id="chat-toggle-btn" class="chat-toggle-btn">
+            <span class="chat-btn-icon">💬</span>
+            <span class="chat-btn-text">AI Contacts Extractor</span>
+            <span class="chat-unread-badge hidden">!</span>
+        </button>
+
+        <!-- Collapsible Chat Drawer Panel -->
+        <div id="chat-drawer" class="chat-drawer hidden">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <span class="chat-dot online"></span>
+                    Groq AI Assistant
+                </div>
+                <button id="chat-close-btn" class="chat-close-btn">&times;</button>
+            </div>
+            
+            <!-- Chat Message log -->
+            <div id="chat-body" class="chat-body">
+                <div class="chat-msg assistant">
+                    <div class="msg-avatar">🤖</div>
+                    <div class="msg-content">
+                        Hi! I am your AI Contacts Extractor. 
+                        <br><br>
+                        You can upload a document (like a PDF, Excel sheet, or even a **photo/screenshot** of emails) or paste text, and I will extract the email list so you can load them directly into the broadcaster!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload filename preview tag -->
+            <div id="chat-file-preview" class="chat-file-preview hidden">
+                <span class="preview-filename-text" id="preview-filename-text">file.pdf</span>
+                <button id="chat-clear-file-btn" class="chat-clear-file-btn">&times;</button>
+            </div>
+
+            <!-- Input area -->
+            <div class="chat-footer">
+                <!-- Hidden file upload input inside the chatbot -->
+                <input type="file" id="chat_file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.txt" hidden>
+                
+                <button id="chat-attach-btn" class="chat-attach-btn" title="Attach file (PDF, Spreadsheet, Image, Text)">📎</button>
+                <input type="text" id="chat-input" placeholder="Type a message or describe upload...">
+                <button id="chat-send-btn" class="chat-send-btn">➔</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Interactive Approval Modal Overlay -->
+    <div id="approval-modal" class="modal-overlay hidden">
+        <div class="glass-card modal-content">
+            <div class="modal-header">
+                <h3>📧 Preview & Approve Email (<span id="modal-current-index">0</span>/<span id="modal-total-count">0</span>)</h3>
+                <div class="modal-recipient-row">
+                    <span class="modal-recipient" id="modal-recipient-email">recipient@example.com</span>
+                    <span class="modal-fetched-name" id="modal-fetched-name">Fetched Name: None</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modal-subject-input">Subject Line</label>
+                    <input type="text" id="modal-subject-input" value="">
+                </div>
+                <div class="form-group">
+                    <label for="modal-body-input">Email Body (HTML supported)</label>
+                    <textarea id="modal-body-input" rows="8"></textarea>
+                </div>
+                <div class="modal-attachment" id="modal-attachment-info">
+                    📎 Resume attachment: None
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="modal-skip-btn" class="btn btn-secondary">Skip Email</button>
+                <button id="modal-cancel-btn" class="btn btn-secondary">Cancel Job</button>
+                <button id="modal-auto-approve-btn" class="btn btn-secondary btn-auto-approve">Auto-Approve Remaining</button>
+                <button id="modal-approve-send-btn" class="btn btn-primary">Approve & Send</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
