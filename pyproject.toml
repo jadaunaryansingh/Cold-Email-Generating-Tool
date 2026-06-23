@@ -1,2 +1,19 @@
+[project]
+name = "cold-email"
+version = "0.1.0"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pandas",
+    "openpyxl",
+    "python-multipart",
+    "python-dotenv",
+    "groq",
+    "pypdf",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "google-auth-httplib2"
+]
+
 [tool.vercel]
 entrypoint = "backend.main:app"
