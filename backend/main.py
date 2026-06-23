@@ -1,4 +1,8 @@
+import sys
 import os
+# Ensure project root is in sys.path for Vercel deployment imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import asyncio
 import smtplib
