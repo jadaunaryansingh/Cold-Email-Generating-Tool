@@ -16,7 +16,7 @@
       "dest": "frontend/index.html"
     },
     {
-      "src": "/api/(.*)",
+      "src": "/(.*)",
       "dest": "backend/main.py"
     }
   ]

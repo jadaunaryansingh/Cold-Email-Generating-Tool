@@ -52,6 +52,10 @@ async def get_index():
         return FileResponse(index_path)
     return HTMLResponse("<h1>Cold Email Automator: frontend/index.html not found.</h1>")
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return HTMLResponse(content="", status_code=204)
+
 # Mount directory 'frontend' to '/static' path so files inside are served
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
