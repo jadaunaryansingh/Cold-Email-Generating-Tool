@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Gmail API OAuth Status & Authentication
     async function checkGmailAuthStatus() {
+        if (!authDot || !authStatusText || !googleLoginBtn || !googleLogoutBtn) return;
         try {
             const res = await fetch('/api/auth/status');
             const data = await res.json();
@@ -111,33 +112,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    googleLoginBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch('/api/auth/gmail');
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.detail || 'Failed to start OAuth flow.');
+    if (googleLoginBtn) {
+        googleLoginBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/auth/gmail');
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to start OAuth flow.');
+                }
+                const data = await res.json();
+                // Redirect the user to Google Login Screen
+                window.location.href = data.auth_url;
+            } catch (e) {
+                showToast('Google login error: ' + e.message, 'error');
             }
-            const data = await res.json();
-            // Redirect the user to Google Login Screen
-            window.location.href = data.auth_url;
-        } catch (e) {
-            showToast('Google login error: ' + e.message, 'error');
-        }
-    });
+        });
+    }
 
-    googleLogoutBtn.addEventListener('click', async () => {
-        try {
-            const res = await fetch('/api/auth/logout', { method: 'POST' });
-            const data = await res.json();
-            if (data.success) {
-                showToast('Google account disconnected successfully.', 'success');
-                checkGmailAuthStatus();
+    if (googleLogoutBtn) {
+        googleLogoutBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/auth/logout', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Google account disconnected successfully.', 'success');
+                    checkGmailAuthStatus();
+                }
+            } catch (e) {
+                showToast('Logout error: ' + e.message, 'error');
             }
-        } catch (e) {
-            showToast('Logout error: ' + e.message, 'error');
-        }
-    });
+        });
+    }
 
     // 3. Load Local SMTP Configuration
     function loadSavedSettings() {
