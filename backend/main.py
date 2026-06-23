@@ -47,7 +47,10 @@ groq_service = GroqService()
 gmail_service = GmailService()
 
 # Serve static frontend folder (to be populated shortly)
-os.makedirs("frontend", exist_ok=True)
+try:
+    os.makedirs("frontend", exist_ok=True)
+except OSError:
+    pass
 
 @app.get("/")
 async def get_index():
