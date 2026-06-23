@@ -488,16 +488,15 @@ async def logout_gmail():
 @app.get("/api/config/smtp")
 async def get_smtp_config():
     """
-    Returns default SMTP server and sender email configured in the backend .env file.
-    Note: Password is never exposed for security.
+    Returns empty SMTP configuration defaults to ensure user-configured values on the frontend are prioritized.
     """
     return {
-        "smtp_server": os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-        "smtp_port": int(os.getenv("MAIL_PORT", 587)) if os.getenv("MAIL_PORT") else 587,
-        "sender_email": os.getenv("MAIL_USERNAME", ""),
-        "has_password": bool(os.getenv("MAIL_PASSWORD")),
-        "mail_from": os.getenv("MAIL_FROM", "")
-    }
+        "smtp_server": "",
+        "smtp_port": 587,
+        "sender_email": "",
+        "has_password": False,
+        "mail_from": ""
+     }
 
 @app.post("/api/send")
 async def send_emails(
@@ -590,35 +589,17 @@ async def send_emails(
                             })}\n\n"
                         else:
                             # Send via traditional SMTP
-                            # Determine SMTP server details (fallback to environment variables if not provided)
-                            current_smtp_server = smtp_server or os.getenv("MAIL_SERVER")
-                            
-                            # Clean up and determine port
-                            current_smtp_port = smtp_port
-                            if not current_smtp_port or current_smtp_port == 0:
-                                env_port = os.getenv("MAIL_PORT")
-                                current_smtp_port = int(env_port) if env_port else 587
-                                
-                            current_sender_email = sender_email or os.getenv("MAIL_USERNAME")
-                            
-                            # Handle secure fallback password
+                            # Use details entered by the user in the frontend Connection Settings
+                            current_smtp_server = smtp_server
+                            current_smtp_port = smtp_port or 587
+                            current_sender_email = sender_email
                             current_sender_password = sender_password
-                            if not current_sender_password or current_sender_password == "••••••••••••••••":
-                                current_sender_password = os.getenv("MAIL_PASSWORD")
                                 
-                            # Set defaults for security if port matches standard ports
                             current_use_ssl = use_ssl
                             current_use_tls = use_tls
-                            if not smtp_server: # If we fell back to env
-                                if current_smtp_port == 465:
-                                    current_use_ssl = True
-                                    current_use_tls = False
-                                elif current_smtp_port == 587:
-                                    current_use_ssl = False
-                                    current_use_tls = True
 
                             if not current_smtp_server or not current_sender_email or not current_sender_password:
-                                raise ValueError("SMTP configuration is missing (both form settings and environment defaults are empty).")
+                                raise ValueError("SMTP configuration is missing. Please enter your SMTP Server, Port, Sender Email, and Password in the Connection Settings.")
 
                             msg = MIMEMultipart()
                             msg['From'] = current_sender_email
@@ -759,29 +740,17 @@ async def send_single_email(
             }
         else:
             # Send via traditional SMTP
-            current_smtp_server = smtp_server or os.getenv("MAIL_SERVER")
-            current_smtp_port = smtp_port
-            if not current_smtp_port or current_smtp_port == 0:
-                env_port = os.getenv("MAIL_PORT")
-                current_smtp_port = int(env_port) if env_port else 587
-                
-            current_sender_email = sender_email or os.getenv("MAIL_USERNAME")
+            # Use details entered by the user in the frontend Connection Settings
+            current_smtp_server = smtp_server
+            current_smtp_port = smtp_port or 587
+            current_sender_email = sender_email
             current_sender_password = sender_password
-            if not current_sender_password or current_sender_password == "••••••••••••••••":
-                current_sender_password = os.getenv("MAIL_PASSWORD")
-                
+            
             current_use_ssl = use_ssl
             current_use_tls = use_tls
-            if not smtp_server: # If we fell back to env
-                if current_smtp_port == 465:
-                    current_use_ssl = True
-                    current_use_tls = False
-                elif current_smtp_port == 587:
-                    current_use_ssl = False
-                    current_use_tls = True
 
             if not current_smtp_server or not current_sender_email or not current_sender_password:
-                raise ValueError("SMTP configuration is missing (both form settings and environment defaults are empty).")
+                raise ValueError("SMTP configuration is missing. Please enter your SMTP Server, Port, Sender Email, and Password in the Connection Settings.")
 
             msg = MIMEMultipart()
             msg['From'] = current_sender_email
