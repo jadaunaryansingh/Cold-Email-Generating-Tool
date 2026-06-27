@@ -20,6 +20,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from googleapiclient.errors import HttpError
 
 app = FastAPI(title="Cold Email Automator API")
 
@@ -695,6 +696,112 @@ async def compile_template_endpoint(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/test-connection")
+async def test_connection(
+    smtp_server: str = Form(None),
+    smtp_port: int = Form(None),
+    sender_email: str = Form(None),
+    sender_password: str = Form(None),
+    use_tls: bool = Form(True),
+    use_ssl: bool = Form(False),
+    send_method: str = Form("smtp")
+):
+    try:
+        if send_method == "gmail_api":
+            if not gmail_service.is_authenticated():
+                raise HTTPException(status_code=400, detail="Gmail API token not authenticated. Please log in.")
+            
+            # Send test email via Gmail API to self
+            subject = "Cold Email Automator - Connection & Limit Test"
+            body = "Your Gmail API credentials are valid and the daily sending limit is not reached!"
+            gmail_service.send_mime_message(
+                recipient_email=sender_email or "me",
+                subject=subject,
+                body=body
+            )
+            return {
+                "success": True,
+                "message": "Gmail API connection test successful! Test email sent to self."
+            }
+        else:
+            if not smtp_server or not sender_email or not sender_password:
+                raise ValueError("SMTP configuration is missing. Please enter SMTP Server, Port, Sender Email, and Password.")
+            
+            msg = MIMEMultipart()
+            msg['From'] = sender_email
+            msg['To'] = sender_email
+            msg['Subject'] = "Cold Email Automator - SMTP Connection & Limit Test"
+            
+            body_text = "Your SMTP connection is working perfectly and the daily sending limit has not been exceeded!"
+            msg.attach(MIMEText(body_text, 'plain'))
+            
+            server = None
+            try:
+                if use_ssl:
+                    server = smtplib.SMTP_SSL(smtp_server, smtp_port or 465, timeout=15)
+                else:
+                    server = smtplib.SMTP(smtp_server, smtp_port or 587, timeout=15)
+                if use_tls and not use_ssl:
+                    server.starttls()
+                    
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, sender_email, msg.as_string())
+            finally:
+                if server:
+                    try:
+                        server.quit()
+                    except Exception:
+                        pass
+            
+            return {
+                "success": True,
+                "message": "SMTP connection test successful! Test email sent to self."
+            }
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except smtplib.SMTPAuthenticationError as auth_err:
+        err_msg = str(auth_err)
+        if "Username and Password not accepted" in err_msg or "535" in err_msg:
+            detail = "SMTP Authentication failed. Please verify your sender email and password/app password."
+        else:
+            detail = f"SMTP Authentication failed: {err_msg}"
+        raise HTTPException(status_code=400, detail=detail)
+    except (smtplib.SMTPConnectError, ConnectionRefusedError) as conn_err:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not connect to SMTP server. Please verify your SMTP Server and Port settings."
+        )
+    except TimeoutError as timeout_err:
+        raise HTTPException(
+            status_code=400,
+            detail="SMTP connection timed out. Please check your port, security, and network settings."
+        )
+    except smtplib.SMTPException as smtp_err:
+        err_msg = str(smtp_err)
+        if any(kw in err_msg.lower() for kw in ["limit", "quota", "exceeded", "5.4.5"]):
+            raise HTTPException(
+                status_code=429,
+                detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=400, detail=f"SMTP error: {err_msg}")
+    except HttpError as google_err:
+        err_status = google_err.resp.status
+        err_content = str(google_err)
+        if "limit" in err_content.lower() or err_status in [429, 403]:
+            raise HTTPException(
+                status_code=429,
+                detail="Gmail API Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=err_status, detail=f"Gmail API error: {err_content}")
+    except Exception as e:
+        err_msg = str(e)
+        if any(kw in err_msg.lower() for kw in ["limit", "quota", "exceeded", "5.4.5"]):
+            raise HTTPException(
+                status_code=429,
+                detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=500, detail=f"Unexpected connection error: {err_msg}")
+
 @app.post("/api/send-single")
 async def send_single_email(
     recipient_email: str = Form(...),
@@ -803,6 +910,54 @@ async def send_single_email(
                 "success": True,
                 "message": f"Email sent successfully to {recipient_email} via SMTP!"
             }
+    except ValueError as val_err:
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(val_err))
+    except smtplib.SMTPAuthenticationError as auth_err:
+        traceback.print_exc()
+        err_msg = str(auth_err)
+        if "Username and Password not accepted" in err_msg or "535" in err_msg:
+            detail = "SMTP Authentication failed. Please verify your sender email and password/app password."
+        else:
+            detail = f"SMTP Authentication failed: {err_msg}"
+        raise HTTPException(status_code=400, detail=detail)
+    except (smtplib.SMTPConnectError, ConnectionRefusedError) as conn_err:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400,
+            detail="Could not connect to SMTP server. Please verify your SMTP Server and Port settings."
+        )
+    except TimeoutError as timeout_err:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=400,
+            detail="SMTP connection timed out. Please check your port, security, and network settings."
+        )
+    except smtplib.SMTPException as smtp_err:
+        traceback.print_exc()
+        err_msg = str(smtp_err)
+        if any(kw in err_msg.lower() for kw in ["limit", "quota", "exceeded", "5.4.5"]):
+            raise HTTPException(
+                status_code=429,
+                detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=400, detail=f"SMTP error occurred: {err_msg}")
+    except HttpError as google_err:
+        traceback.print_exc()
+        err_status = google_err.resp.status
+        err_content = str(google_err)
+        if "limit" in err_content.lower() or err_status in [429, 403]:
+            raise HTTPException(
+                status_code=429,
+                detail="Gmail API Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=err_status, detail=f"Gmail API error: {err_content}")
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        err_msg = str(e)
+        if any(kw in err_msg.lower() for kw in ["limit", "quota", "exceeded", "5.4.5"]):
+            raise HTTPException(
+                status_code=429,
+                detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {err_msg}")

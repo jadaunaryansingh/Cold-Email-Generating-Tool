@@ -76,7 +76,10 @@
                         <input type="number" id="delay_seconds" value="2.0" step="0.5" min="0.5">
                         <small class="help-text">Delay between emails to prevent spam flags.</small>
                     </div>
-                    <button type="submit" id="save-settings-btn" class="btn btn-secondary">Save Configuration</button>
+                    <div class="settings-actions" style="display: flex; gap: 10px; margin-top: 1rem;">
+                        <button type="submit" id="save-settings-btn" class="btn btn-secondary" style="flex: 1;">Save Config</button>
+                        <button type="button" id="test-connection-btn" class="btn btn-primary" style="flex: 1;">Test Connection</button>
+                    </div>
                 </form>
             </aside>
 

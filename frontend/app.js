@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const senderEmailInput = document.getElementById('sender_email');
     const senderPasswordInput = document.getElementById('sender_password');
     const delaySecondsInput = document.getElementById('delay_seconds');
+    const testConnectionBtn = document.getElementById('test-connection-btn');
 
     const contactsInput = document.getElementById('contacts_file');
     const contactsDropzone = document.getElementById('contacts-dropzone');
@@ -203,6 +204,73 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Configuration saved successfully!', 'success');
         } catch (err) {
             showToast('Failed to save settings: ' + err.message, 'error');
+        }
+    });
+
+    testConnectionBtn.addEventListener('click', async () => {
+        const sendMethod = sendMethodSelect.value;
+        const formData = new FormData();
+        formData.append('send_method', sendMethod);
+
+        if (sendMethod === 'smtp') {
+            const server = smtpServerInput.value.trim();
+            const port = smtpPortInput.value.trim();
+            const email = senderEmailInput.value.trim();
+            const password = senderPasswordInput.value.trim();
+
+            if (!server || !email || !password) {
+                showToast('Please fill out SMTP Server, Sender Email, and App Password before testing.', 'error');
+                return;
+            }
+            formData.append('smtp_server', server);
+            formData.append('smtp_port', port);
+            formData.append('sender_email', email);
+            formData.append('sender_password', password);
+            
+            const sec = smtpSecuritySelect.value;
+            formData.append('use_tls', sec === 'tls');
+            formData.append('use_ssl', sec === 'ssl');
+        } else {
+            // gmail_api method
+            formData.append('sender_email', senderEmailInput.value.trim());
+        }
+
+        const originalText = testConnectionBtn.textContent;
+        testConnectionBtn.disabled = true;
+        testConnectionBtn.textContent = 'Testing...';
+
+        try {
+            const res = await fetch('/api/test-connection', {
+                method: 'POST',
+                body: formData
+            });
+
+            let errDetail = 'Connection test failed.';
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const data = await res.json();
+                if (res.ok) {
+                    showToast(data.message || 'Connection successful! Test email sent.', 'success');
+                    testConnectionBtn.disabled = false;
+                    testConnectionBtn.textContent = originalText;
+                    return;
+                }
+                errDetail = data.detail || errDetail;
+            } else {
+                const rawText = await res.text();
+                errDetail = rawText || errDetail;
+            }
+
+            if (res.status === 429) {
+                showToast('⚠️ Daily limit reached: ' + errDetail, 'error');
+            } else {
+                showToast('Connection test failed: ' + errDetail, 'error');
+            }
+        } catch (err) {
+            showToast('Connection test failed: ' + err.message, 'error');
+        } finally {
+            testConnectionBtn.disabled = false;
+            testConnectionBtn.textContent = originalText;
         }
     });
 
@@ -946,8 +1014,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 if (!sendRes.ok) {
-                    const errText = await sendRes.text();
-                    throw new Error(`HTTP Error ${sendRes.status}: ${errText}`);
+                    let errMsg = `HTTP Error ${sendRes.status}`;
+                    let isRateLimit = (sendRes.status === 429);
+                    try {
+                        const errText = await sendRes.text();
+                        try {
+                            const errData = JSON.parse(errText);
+                            if (errData && errData.detail) {
+                                errMsg = errData.detail;
+                                if (errMsg.toLowerCase().includes("limit") || errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("exceeded")) {
+                                    isRateLimit = true;
+                                }
+                            } else {
+                                errMsg += `: ${errText}`;
+                            }
+                        } catch (jsonErr) {
+                            if (errText) {
+                                errMsg += `: ${errText}`;
+                            }
+                        }
+                    } catch (readErr) {}
+                    
+                    const errorObj = new Error(errMsg);
+                    errorObj.isRateLimit = isRateLimit;
+                    throw errorObj;
                 }
 
                 const sendData = await sendRes.json();
@@ -972,6 +1062,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     email: contact.email,
                     msg: `Failed: ${sendErr.message}`
                 });
+                
+                if (sendErr.isRateLimit || sendErr.message.toLowerCase().includes("limit exceeded") || sendErr.message.toLowerCase().includes("5.4.5")) {
+                    appendLog({
+                        type: 'error',
+                        email: 'System',
+                        msg: 'Critical: Daily sending limit exceeded! Aborting sending queue.'
+                    });
+                    showToast('Daily sending limit reached! Sending aborted.', 'error');
+                    break;
+                }
             }
 
             updateProgressBar(idx + 1, totalEmails);
