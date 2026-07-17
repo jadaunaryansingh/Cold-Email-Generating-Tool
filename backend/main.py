@@ -741,29 +741,52 @@ async def test_connection(
             
             body_text = "Your SMTP connection is working perfectly and the daily sending limit has not been exceeded!"
             msg.attach(MIMEText(body_text, 'plain'))
-            
+
             server = None
-            try:
-                if use_ssl:
-                    server = smtplib.SMTP_SSL(smtp_server, parsed_port or 465, timeout=15)
-                else:
-                    server = smtplib.SMTP(smtp_server, parsed_port or 587, timeout=15)
-                if use_tls and not use_ssl:
-                    server.starttls()
-                    
-                server.login(sender_email, sender_password)
-                server.sendmail(sender_email, sender_email, msg.as_string())
-            finally:
-                if server:
-                    try:
-                        server.quit()
-                    except Exception:
-                        pass
-            
-            return {
-                "success": True,
-                "message": "SMTP connection test successful! Test email sent to self."
-            }
+            last_error = None
+            attempts = []
+
+            if use_ssl:
+                attempts.append((True, parsed_port or 465))
+            else:
+                attempts.append((False, parsed_port or 587))
+
+            if smtp_server and "yahoo" in smtp_server.lower():
+                attempts.append((True, 465))
+                attempts.append((False, 587))
+
+            for use_ssl_attempt, port in attempts:
+                server = None
+                try:
+                    if use_ssl_attempt:
+                        server = smtplib.SMTP_SSL(smtp_server, port, timeout=15)
+                    else:
+                        server = smtplib.SMTP(smtp_server, port, timeout=15)
+                        if use_tls and not use_ssl_attempt:
+                            server.starttls()
+
+                    server.login(sender_email, sender_password)
+                    server.sendmail(sender_email, sender_email, msg.as_string())
+                    return {
+                        "success": True,
+                        "message": "SMTP connection test successful! Test email sent to self."
+                    }
+                except Exception as exc:
+                    last_error = exc
+                    if server:
+                        try:
+                            server.quit()
+                        except Exception:
+                            pass
+                    if not isinstance(exc, (smtplib.SMTPConnectError, ConnectionRefusedError, TimeoutError, smtplib.SMTPException)):
+                        raise
+                    if "yahoo" not in (smtp_server or "").lower() or "connection unexpectedly closed" not in str(exc).lower():
+                        raise
+                    continue
+
+            if last_error is not None:
+                raise last_error
+            raise ValueError("SMTP configuration is missing. Please enter SMTP Server, Port, Sender Email, and Password.")
     except ValueError as val_err:
         raise HTTPException(status_code=400, detail=str(val_err))
     except smtplib.SMTPAuthenticationError as auth_err:
@@ -789,6 +812,11 @@ async def test_connection(
             raise HTTPException(
                 status_code=429,
                 detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        if "connection unexpectedly closed" in err_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="SMTP connection was closed unexpectedly. Try port 465 with SSL or verify your Yahoo app password and server settings."
             )
         raise HTTPException(status_code=400, detail=f"SMTP error: {err_msg}")
     except HttpError as google_err:

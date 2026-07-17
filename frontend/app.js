@@ -304,7 +304,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 errDetail = rawText || errDetail;
             }
 
-            if (res.status === 429) {
+            if (res.status === 400) {
+                showToast('Connection test failed: ' + errDetail, 'error');
+            } else if (res.status === 429) {
                 showToast('⚠️ Daily limit reached: ' + errDetail, 'error');
             } else {
                 showToast('Connection test failed: ' + errDetail, 'error');
