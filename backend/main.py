@@ -16,6 +16,7 @@ import pandas as pd
 from backend.config import PORT, HOST
 from backend.services.groq_service import GroqService
 from backend.services.gmail_service import GmailService
+from backend.smtp_helpers import build_smtp_attempts, is_retryable_smtp_error
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -773,16 +774,17 @@ async def test_connection(
                     }
                 except Exception as exc:
                     last_error = exc
-                    if server:
-                        try:
-                            server.quit()
-                        except Exception:
-                            pass
                     if not isinstance(exc, (smtplib.SMTPConnectError, ConnectionRefusedError, TimeoutError, smtplib.SMTPException)):
                         raise
                     if "yahoo" not in (smtp_server or "").lower() or "connection unexpectedly closed" not in str(exc).lower():
                         raise
                     continue
+                finally:
+                    if server:
+                        try:
+                            server.quit()
+                        except Exception:
+                            pass
 
             if last_error is not None:
                 raise last_error
@@ -924,27 +926,38 @@ async def send_single_email(
                 msg.attach(part)
                 
             server = None
-            try:
-                if current_use_ssl:
-                    server = smtplib.SMTP_SSL(current_smtp_server, current_smtp_port, timeout=15)
-                else:
-                    server = smtplib.SMTP(current_smtp_server, current_smtp_port, timeout=15)
-                if current_use_tls and not current_use_ssl:
-                    server.starttls()
-                    
-                server.login(current_sender_email, current_sender_password)
-                server.sendmail(current_sender_email, recipient_email, msg.as_string())
-            finally:
-                if server:
-                    try:
-                        server.quit()
-                    except Exception:
-                        pass
-            
-            return {
-                "success": True,
-                "message": f"Email sent successfully to {recipient_email} via SMTP!"
-            }
+            last_error = None
+            attempts = build_smtp_attempts(current_smtp_server, current_smtp_port, use_tls=current_use_tls, use_ssl=current_use_ssl)
+
+            for use_ssl_attempt, port, use_tls_attempt in attempts:
+                server = None
+                try:
+                    if use_ssl_attempt:
+                        server = smtplib.SMTP_SSL(current_smtp_server, port, timeout=15)
+                    else:
+                        server = smtplib.SMTP(current_smtp_server, port, timeout=15)
+                    if use_tls_attempt and not use_ssl_attempt:
+                        server.starttls()
+
+                    server.login(current_sender_email, current_sender_password)
+                    server.sendmail(current_sender_email, recipient_email, msg.as_string())
+                    return {
+                        "success": True,
+                        "message": f"Email sent successfully to {recipient_email} via SMTP!"
+                    }
+                except Exception as exc:
+                    last_error = exc
+                    if not is_retryable_smtp_error(exc):
+                        raise
+                finally:
+                    if server:
+                        try:
+                            server.quit()
+                        except Exception:
+                            pass
+            if last_error is not None:
+                raise last_error
+            raise ValueError("SMTP delivery failed without a captured error.")
     except ValueError as val_err:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(val_err))
@@ -975,6 +988,16 @@ async def send_single_email(
             raise HTTPException(
                 status_code=429,
                 detail="Daily sending limit exceeded. Please try again tomorrow or use another SMTP account."
+            )
+        if "connection unexpectedly closed" in err_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="SMTP delivery failed because the server closed the connection unexpectedly. This can happen with provider-specific restrictions or a bad app password."
+            )
+        if "554" in err_msg or "6.6.0" in err_msg or "delivery" in err_msg.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="SMTP delivery was rejected by the recipient provider. The message was not delivered."
             )
         raise HTTPException(status_code=400, detail=f"SMTP error occurred: {err_msg}")
     except HttpError as google_err:
