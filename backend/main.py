@@ -699,7 +699,7 @@ async def compile_template_endpoint(
 @app.post("/api/test-connection")
 async def test_connection(
     smtp_server: str = Form(None),
-    smtp_port: int = Form(None),
+    smtp_port: str = Form(""),
     sender_email: str = Form(None),
     sender_password: str = Form(None),
     use_tls: bool = Form(True),
@@ -707,6 +707,13 @@ async def test_connection(
     send_method: str = Form("smtp")
 ):
     try:
+        parsed_port = None
+        if smtp_port is not None and str(smtp_port).strip():
+            try:
+                parsed_port = int(str(smtp_port).strip())
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="SMTP port must be a valid integer.") from exc
+
         if send_method == "gmail_api":
             if not gmail_service.is_authenticated():
                 raise HTTPException(status_code=400, detail="Gmail API token not authenticated. Please log in.")
@@ -738,9 +745,9 @@ async def test_connection(
             server = None
             try:
                 if use_ssl:
-                    server = smtplib.SMTP_SSL(smtp_server, smtp_port or 465, timeout=15)
+                    server = smtplib.SMTP_SSL(smtp_server, parsed_port or 465, timeout=15)
                 else:
-                    server = smtplib.SMTP(smtp_server, smtp_port or 587, timeout=15)
+                    server = smtplib.SMTP(smtp_server, parsed_port or 587, timeout=15)
                 if use_tls and not use_ssl:
                     server.starttls()
                     

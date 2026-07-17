@@ -78,17 +78,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let isChatOpen = false;
 
     // 1. Connection Method Selector Toggle
-    sendMethodSelect.addEventListener('change', () => {
-        const method = sendMethodSelect.value;
+    function updateConnectionMethodView() {
+        const method = sendMethodSelect?.value || 'smtp';
         if (method === 'smtp') {
-            smtpInputsSection.classList.remove('hidden');
-            gmailApiSection.classList.add('hidden');
+            smtpInputsSection?.classList.remove('hidden');
+            gmailApiSection?.classList.add('hidden');
         } else {
-            smtpInputsSection.classList.add('hidden');
-            gmailApiSection.classList.remove('hidden');
+            smtpInputsSection?.classList.add('hidden');
+            gmailApiSection?.classList.remove('hidden');
             checkGmailAuthStatus();
         }
-    });
+    }
+
+    if (sendMethodSelect) {
+        sendMethodSelect.addEventListener('change', updateConnectionMethodView);
+    }
 
     // 2. Gmail API OAuth Status & Authentication
     async function checkGmailAuthStatus() {
@@ -145,22 +149,61 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function inferProviderDefaults(email) {
+        const value = (email || '').trim().toLowerCase();
+        if (value.includes('yahoo')) {
+            return { smtp_server: 'smtp.mail.yahoo.com', smtp_port: '587', smtp_security: 'tls' };
+        }
+        if (value.includes('outlook') || value.includes('live') || value.includes('hotmail')) {
+            return { smtp_server: 'smtp.office365.com', smtp_port: '587', smtp_security: 'tls' };
+        }
+        if (value.includes('gmail')) {
+            return { smtp_server: 'smtp.gmail.com', smtp_port: '587', smtp_security: 'tls' };
+        }
+        return null;
+    }
+
+    function applyProviderDefaults(email) {
+        const defaults = inferProviderDefaults(email);
+        if (!defaults) return;
+
+        if (smtpServerInput && (!smtpServerInput.value || ['smtp.gmail.com', 'smtp.mail.yahoo.com', 'smtp.office365.com'].includes(smtpServerInput.value))) {
+            smtpServerInput.value = defaults.smtp_server;
+        }
+        if (smtpPortInput && (!smtpPortInput.value || smtpPortInput.value === '587')) {
+            smtpPortInput.value = defaults.smtp_port;
+        }
+        if (smtpSecuritySelect && (!smtpSecuritySelect.value || smtpSecuritySelect.value === 'tls')) {
+            smtpSecuritySelect.value = defaults.smtp_security;
+        }
+    }
+
+    if (senderEmailInput) {
+        senderEmailInput.addEventListener('input', () => applyProviderDefaults(senderEmailInput.value));
+    }
+
     // 3. Load Local SMTP Configuration
     function loadSavedSettings() {
         try {
             const saved = localStorage.getItem('cold_email_smtp_settings');
             if (saved) {
                 const settings = JSON.parse(saved);
-                smtpServerInput.value = settings.smtp_server || 'smtp.gmail.com';
-                smtpPortInput.value = settings.smtp_port || '587';
-                smtpSecuritySelect.value = settings.smtp_security || 'tls';
-                senderEmailInput.value = settings.sender_email || '';
-                senderPasswordInput.value = settings.sender_password || '';
-                delaySecondsInput.value = settings.delay_seconds || '2.0';
-                sendMethodSelect.value = settings.send_method || 'smtp';
-                
-                // Trigger view toggle
-                sendMethodSelect.dispatchEvent(new Event('change'));
+                if (smtpServerInput) smtpServerInput.value = settings.smtp_server || 'smtp.gmail.com';
+                if (smtpPortInput) smtpPortInput.value = settings.smtp_port || '587';
+                if (smtpSecuritySelect) smtpSecuritySelect.value = settings.smtp_security || 'tls';
+                if (senderEmailInput) senderEmailInput.value = settings.sender_email || '';
+                if (senderPasswordInput) senderPasswordInput.value = settings.sender_password || '';
+                if (delaySecondsInput) delaySecondsInput.value = settings.delay_seconds || '2.0';
+                if (sendMethodSelect) {
+                    sendMethodSelect.value = settings.send_method || 'smtp';
+                    sendMethodSelect.dispatchEvent(new Event('change'));
+                }
+            } else {
+                updateConnectionMethodView();
+            }
+
+            if (senderEmailInput) {
+                applyProviderDefaults(senderEmailInput.value);
             }
         } catch (e) {
             console.error("Failed to load settings", e);
@@ -208,15 +251,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     testConnectionBtn.addEventListener('click', async () => {
-        const sendMethod = sendMethodSelect.value;
+        const sendMethod = sendMethodSelect?.value || 'smtp';
         const formData = new FormData();
         formData.append('send_method', sendMethod);
 
         if (sendMethod === 'smtp') {
-            const server = smtpServerInput.value.trim();
-            const port = smtpPortInput.value.trim();
-            const email = senderEmailInput.value.trim();
-            const password = senderPasswordInput.value.trim();
+            const server = smtpServerInput?.value.trim() || '';
+            const port = smtpPortInput?.value.trim() || '';
+            const email = senderEmailInput?.value.trim() || '';
+            const password = senderPasswordInput?.value.trim() || '';
 
             if (!server || !email || !password) {
                 showToast('Please fill out SMTP Server, Sender Email, and App Password before testing.', 'error');
@@ -227,12 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('sender_email', email);
             formData.append('sender_password', password);
             
-            const sec = smtpSecuritySelect.value;
+            const sec = smtpSecuritySelect?.value || 'tls';
             formData.append('use_tls', sec === 'tls');
             formData.append('use_ssl', sec === 'ssl');
         } else {
             // gmail_api method
-            formData.append('sender_email', senderEmailInput.value.trim());
+            formData.append('sender_email', senderEmailInput?.value.trim() || '');
         }
 
         const originalText = testConnectionBtn.textContent;
