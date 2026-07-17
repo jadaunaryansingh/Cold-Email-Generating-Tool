@@ -1057,71 +1057,102 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('use_ssl', sec === 'ssl');
             }
 
-            try {
-                const sendRes = await fetch('/api/send-single', {
-                    method: 'POST',
-                    body: formData
-                });
+            let maxRetries = 3;
+            let attempt = 0;
+            let sentSuccessfully = false;
 
-                if (!sendRes.ok) {
-                    let errMsg = `HTTP Error ${sendRes.status}`;
-                    let isRateLimit = (sendRes.status === 429);
-                    try {
-                        const errText = await sendRes.text();
+            while (attempt < maxRetries && !sentSuccessfully) {
+                if (isSendCancelled) break;
+
+                try {
+                    const sendRes = await fetch('/api/send-single', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!sendRes.ok) {
+                        let errMsg = `HTTP Error ${sendRes.status}`;
+                        let isRateLimit = (sendRes.status === 429);
                         try {
-                            const errData = JSON.parse(errText);
-                            if (errData && errData.detail) {
-                                errMsg = errData.detail;
-                                if (errMsg.toLowerCase().includes("limit") || errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("exceeded")) {
-                                    isRateLimit = true;
+                            const errText = await sendRes.text();
+                            try {
+                                const errData = JSON.parse(errText);
+                                if (errData && errData.detail) {
+                                    errMsg = errData.detail;
+                                    if (errMsg.toLowerCase().includes("limit") || errMsg.toLowerCase().includes("quota") || errMsg.toLowerCase().includes("exceeded")) {
+                                        isRateLimit = true;
+                                    }
+                                } else {
+                                    errMsg += `: ${errText}`;
                                 }
-                            } else {
-                                errMsg += `: ${errText}`;
+                            } catch (jsonErr) {
+                                if (errText) {
+                                    errMsg += `: ${errText}`;
+                                }
                             }
-                        } catch (jsonErr) {
-                            if (errText) {
-                                errMsg += `: ${errText}`;
-                            }
-                        }
-                    } catch (readErr) {}
-                    
-                    const errorObj = new Error(errMsg);
-                    errorObj.isRateLimit = isRateLimit;
-                    throw errorObj;
-                }
+                        } catch (readErr) {}
+                        
+                        const errorObj = new Error(errMsg);
+                        errorObj.isRateLimit = isRateLimit;
+                        throw errorObj;
+                    }
 
-                const sendData = await sendRes.json();
-                if (isDryRun) {
-                    appendLog({
-                        type: 'info',
-                        email: contact.email,
-                        msg: sendData.message
-                    });
-                } else {
-                    successCount++;
-                    appendLog({
-                        type: 'success',
-                        email: contact.email,
-                        msg: sendData.message
-                    });
+                    const sendData = await sendRes.json();
+                    if (isDryRun) {
+                        appendLog({
+                            type: 'info',
+                            email: contact.email,
+                            msg: sendData.message
+                        });
+                    } else {
+                        successCount++;
+                        appendLog({
+                            type: 'success',
+                            email: contact.email,
+                            msg: sendData.message
+                        });
+                    }
+                    sentSuccessfully = true;
+                } catch (sendErr) {
+                    if (sendErr.isRateLimit || sendErr.message.toLowerCase().includes("limit exceeded") || sendErr.message.toLowerCase().includes("5.4.5")) {
+                        failCount++;
+                        appendLog({
+                            type: 'error',
+                            email: contact.email,
+                            msg: `Failed: ${sendErr.message}`
+                        });
+                        appendLog({
+                            type: 'error',
+                            email: 'System',
+                            msg: 'Critical: Daily sending limit exceeded! Aborting sending queue.'
+                        });
+                        showToast('Daily sending limit reached! Sending aborted.', 'error');
+                        isSendCancelled = true;
+                        break;
+                    }
+
+                    attempt++;
+                    if (attempt < maxRetries) {
+                        const backoffDelay = attempt * 8; // 8s, 16s
+                        appendLog({
+                            type: 'error',
+                            email: contact.email,
+                            msg: `Attempt ${attempt} failed: ${sendErr.message}. Retrying in ${backoffDelay} seconds...`
+                        });
+                        await new Promise(r => setTimeout(r, backoffDelay * 1000));
+                    } else {
+                        failCount++;
+                        appendLog({
+                            type: 'error',
+                            email: contact.email,
+                            msg: `Failed after ${maxRetries} attempts: ${sendErr.message}`
+                        });
+                    }
                 }
-            } catch (sendErr) {
-                failCount++;
-                appendLog({
-                    type: 'error',
-                    email: contact.email,
-                    msg: `Failed: ${sendErr.message}`
-                });
-                
-                if (sendErr.isRateLimit || sendErr.message.toLowerCase().includes("limit exceeded") || sendErr.message.toLowerCase().includes("5.4.5")) {
-                    appendLog({
-                        type: 'error',
-                        email: 'System',
-                        msg: 'Critical: Daily sending limit exceeded! Aborting sending queue.'
-                    });
-                    showToast('Daily sending limit reached! Sending aborted.', 'error');
-                    break;
-                }
+            }
+
+            if (isSendCancelled) {
+                break;
             }
 
             updateProgressBar(idx + 1, totalEmails);
