@@ -911,6 +911,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // 9. Operations Handler: Send Emails
     let isSendCancelled = false;
 
+    async function sleepCancelable(ms) {
+        const start = Date.now();
+        while (Date.now() - start < ms) {
+            if (isSendCancelled) break;
+            await new Promise(r => setTimeout(r, 100));
+        }
+    }
+
     sendEmailsBtn.addEventListener('click', async () => {
         const isDryRun = dryRunToggle.checked;
 
@@ -1139,7 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             email: contact.email,
                             msg: `Attempt ${attempt} failed: ${sendErr.message}. Retrying in ${backoffDelay} seconds...`
                         });
-                        await new Promise(r => setTimeout(r, backoffDelay * 1000));
+                        await sleepCancelable(backoffDelay * 1000);
                     } else {
                         failCount++;
                         appendLog({
@@ -1147,6 +1155,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             email: contact.email,
                             msg: `Failed after ${maxRetries} attempts: ${sendErr.message}`
                         });
+                        if (!isDryRun) {
+                            const cooldownDelay = 60; // 60 seconds cooldown to reset SMTP rate limits
+                            appendLog({
+                                type: 'info',
+                                email: 'System',
+                                msg: `[Rate Limit Protection] Connection failed repeatedly. Pausing queue for ${cooldownDelay} seconds to cool down SMTP limits...`
+                            });
+                            await sleepCancelable(cooldownDelay * 1000);
+                        }
                     }
                 }
             }
@@ -1160,7 +1177,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Delay between emails (if not the last one, and if auto-approval was checked or selected)
             if (idx < allContacts.length - 1) {
                 const delaySec = parseFloat(delaySecondsInput.value) || 2;
-                await new Promise(r => setTimeout(r, delaySec * 1000));
+                await sleepCancelable(delaySec * 1000);
             }
         }
 
