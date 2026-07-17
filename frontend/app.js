@@ -1042,12 +1042,17 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('dry_run', isDryRun);
 
             if (sendMethodSelect.value === 'smtp') {
-                formData.append('smtp_server', smtpServerInput.value);
-                formData.append('smtp_port', smtpPortInput.value);
-                formData.append('sender_email', senderEmailInput.value);
-                formData.append('sender_password', senderPasswordInput.value);
+                const smtpServer = smtpServerInput?.value?.trim() || '';
+                const smtpPort = smtpPortInput?.value?.trim() || '';
+                const senderEmail = senderEmailInput?.value?.trim() || '';
+                const senderPassword = senderPasswordInput?.value?.trim() || '';
+
+                if (smtpServer) formData.append('smtp_server', smtpServer);
+                if (smtpPort) formData.append('smtp_port', smtpPort);
+                if (senderEmail) formData.append('sender_email', senderEmail);
+                if (senderPassword) formData.append('sender_password', senderPassword);
                 
-                const sec = smtpSecuritySelect.value;
+                const sec = smtpSecuritySelect?.value || 'tls';
                 formData.append('use_tls', sec === 'tls');
                 formData.append('use_ssl', sec === 'ssl');
             }
